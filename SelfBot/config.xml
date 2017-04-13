@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Settings>
+	<!---User specific token--->
 	<Token>insert-token-here</Token>
+	<!---The character below will also be replaced along with vowels. Note: Cannot be blank--->
 	<ReplaceChar>~</ReplaceChar>
+	<!---If true, checks for uppercase vowels as well--->
+	<CaseSensitive>false</CaseSensitive>
 </Settings>

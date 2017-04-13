@@ -29,6 +29,8 @@ namespace PMDODiscordBot
 
         private string appPath = Directory.GetParent(new Uri(System.Reflection.Assembly.GetEntryAssembly().CodeBase).LocalPath).FullName;
 
+        private XmlDocument doc;
+
         private bool foolsMode = DateTime.Now.Month == 4 && DateTime.Now.Day == 1;
 
         // private IAudioClient vClient;
@@ -137,7 +139,7 @@ namespace PMDODiscordBot
         /// <summary>
         /// Bot's main method
         /// </summary>
-        public void Start()
+        private void Start()
         {
             this.client = new DiscordClient();
 
@@ -154,7 +156,7 @@ namespace PMDODiscordBot
                     string mess = e.Message.Text;
 
                     mess = mess.Replace(".oodle", string.Empty);
-                    char[] vowels = new[]
+                    char[] vowelsLower = new[]
                     {
                         'a',
                         'e',
@@ -162,14 +164,23 @@ namespace PMDODiscordBot
                         'o',
                         'u'
                     };
-                    foreach (char vowel in vowels)
+
+                    mess = vowelsLower.Aggregate(mess, (current, vowel) => current.Replace(vowel, '~'));
+
+                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
+                    bool caseSensitive = Convert.ToBoolean(this.doc.SelectNodes("//CaseSensitive")[0].InnerText);
+
+                    if (caseSensitive)
                     {
-                        mess = mess.Replace(vowel, '~');
+                        for (int index = 0; index < vowelsLower.Length; index++)
+                        {
+                            vowelsLower[index] = vowelsLower[index].ToString().ToUpper().ToCharArray()[0];
+                        }
                     }
-                    XmlDocument doc = new XmlDocument();
-                    doc.Load(Path.Combine(this.appPath, "config.xml"));
-                    string replace = doc.SelectNodes("//ReplaceChar")[0].InnerText;
-                    Console.Out.WriteLine(replace);
+
+                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
+                    string replace = this.doc.SelectNodes("//ReplaceChar")[0].InnerText;
+
                     mess = mess.Replace(replace, "oodle");
 
                     e.Message.Edit(mess);
@@ -178,11 +189,19 @@ namespace PMDODiscordBot
 
             this.client.ExecuteAndWait(async () =>
             {
-                XmlDocument doc = new XmlDocument();
-                doc.Load(Path.Combine(this.appPath, "config.xml"));
-                string token = doc.SelectNodes("//Token")[0].InnerText;
+                try
+                {
+                    this.doc = new XmlDocument();
+                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
+                    string token = this.doc.SelectNodes("//Token")[0].InnerText;
 
-                await this.client.Connect(token, TokenType.User);
+                    await this.client.Connect(token, TokenType.User);
+                }
+                catch (Exception ex)
+                {
+                    Console.Out.WriteLine("Bot failed to connect! Please verify token is correct. Also, if asking for help, NEVER GIVE OUT THE TOKEN EVEN TO ME(JordantheBuizel {Not that I'd want it})!");
+                    throw;
+                }
 
                 // var voiceChannel = _client.FindServers("PMD Online Staff/Volunteers").FirstOrDefault().VoiceChannels.FirstOrDefault(); // Finds the first VoiceChannel on the server 'Music Bot Server'
 
