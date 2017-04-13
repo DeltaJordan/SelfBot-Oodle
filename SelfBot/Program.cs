@@ -175,7 +175,12 @@ namespace PMDODiscordBot
 
             this.client.ExecuteAndWait(async () =>
             {
-                await this.client.Connect("insert-token-here", TokenType.User);
+                XmlDocument doc = new XmlDocument();
+                doc.Load(Path.Combine(this.appPath, "config.xml"));
+                string token = doc.SelectNodes($"//Token")[0].InnerText;
+                Console.Out.WriteLine(token);
+
+                await this.client.Connect(token, TokenType.User);
 
                 // var voiceChannel = _client.FindServers("PMD Online Staff/Volunteers").FirstOrDefault().VoiceChannels.FirstOrDefault(); // Finds the first VoiceChannel on the server 'Music Bot Server'
 
