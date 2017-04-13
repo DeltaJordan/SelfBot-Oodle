@@ -166,8 +166,11 @@ namespace PMDODiscordBot
                     {
                         mess = mess.Replace(vowel, '~');
                     }
-
-                    mess = mess.Replace("~", "oddle");
+                    XmlDocument doc = new XmlDocument();
+                    doc.Load(Path.Combine(this.appPath, "config.xml"));
+                    string replace = doc.SelectNodes("//ReplaceChar")[0].InnerText;
+                    Console.Out.WriteLine(replace);
+                    mess = mess.Replace(replace, "oodle");
 
                     e.Message.Edit(mess);
                 }
@@ -177,8 +180,7 @@ namespace PMDODiscordBot
             {
                 XmlDocument doc = new XmlDocument();
                 doc.Load(Path.Combine(this.appPath, "config.xml"));
-                string token = doc.SelectNodes($"//Token")[0].InnerText;
-                Console.Out.WriteLine(token);
+                string token = doc.SelectNodes("//Token")[0].InnerText;
 
                 await this.client.Connect(token, TokenType.User);
 
