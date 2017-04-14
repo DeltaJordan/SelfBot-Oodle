@@ -8,7 +8,7 @@ Changes every vowel to "oodle". Uses a temporary char (Default: '~') to indicate
 Doubles every vowel in a sentence.
 
 ## .quote [int or "random"]
-Pulls the quote from config.xml requested
+Pulls the requested quote from config.xml
 
 ## .pfp [mention] (Not Working)
 Retrieves a profile picture from a mentioned person and saves it to a file.
