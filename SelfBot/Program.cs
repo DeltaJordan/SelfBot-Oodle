@@ -1,14 +1,21 @@
 ﻿// <copyright file="Program.cs" company="JordantheBuizel">
-// Copyright (c) JordantheBuizel. All rights reserved.
+// Copyright 2017 JordantheBuizel.
+//Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+//
+//The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+//
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // </copyright>
 
-using SuperSocket.ClientEngine;
+
+using Humanizer;
 
 namespace PMDODiscordBot
 {
     using System;
     using System.Collections.Generic;
     using System.Drawing;
+    using System.Drawing.Imaging;
     using System.Globalization;
     using System.IO;
     using System.Linq;
@@ -151,9 +158,10 @@ namespace PMDODiscordBot
 
             this.client.MessageReceived += (s, e) =>
             {
-                if (e.Message.Text.StartsWith(".oodle"))
+                string mess = e.Message.Text;
+
+                if (mess.StartsWith(".oodle"))
                 {
-                    string mess = e.Message.Text;
 
                     mess = mess.Replace(".oodle", string.Empty);
                     char[] vowelsLower = new[]
@@ -185,6 +193,67 @@ namespace PMDODiscordBot
 
                     e.Message.Edit(mess);
                 }
+
+                if (mess.StartsWith(".pfp"))
+                {
+                    mess = mess.Replace(".pfp", string.Empty).Replace("@", string.Empty).Trim();
+                    string[] param = new[]
+                    {
+                        mess.Split('#')[0],
+                        mess.Split('#')[1]
+                    };
+
+                    if (e.Server.GetUser(param[0], Convert.ToUInt16(param[1])) != null)
+                    {
+                        WebClient wbclient = new WebClient();
+                        Stream stream =
+                            wbclient.OpenRead(new Uri(e.Server.GetUser(param[0], Convert.ToUInt16(param[1])).AvatarUrl));
+                        Bitmap bitmap;
+                        bitmap = new Bitmap(stream);
+                        
+                        bitmap.Save(Path.Combine(this.appPath, "pfp" + ImageCodecInfo.GetImageEncoders().First(x => x.FormatID == bitmap.RawFormat.Guid).FilenameExtension.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).First().Trim('*').ToLower()));
+                    }
+                    else
+                    {
+                        Console.Out.WriteLine("Failed");
+                    }
+                }
+
+                if (mess.StartsWith(".makeitdouble"))
+                {
+                    char[] vowelsLower = new[]
+                    {
+                        'a',
+                        'e',
+                        'i',
+                        'o',
+                        'u'
+                    };
+
+                    mess = mess.Replace(".makeitdouble", string.Empty).Trim();
+
+                    foreach (char vowel in vowelsLower)
+                    {
+                        mess = mess.Replace(vowel.ToString(), vowel.ToString() + vowel);
+                    }
+
+                    e.Message.Edit(mess);
+                }
+
+                if (mess.StartsWith(".quote"))
+                {
+                    mess = mess.Replace("quote", string.Empty).Trim();
+                    if (int.TryParse(mess, out int output))
+                    {
+                        e.Message.Edit(this.doc.SelectNodes($"//Quotes/{output.ToWords()}")[0].InnerText);
+                    }
+                    else if (mess.ToLower() == "random")
+                    {
+                        XmlNodeList nodes = this.doc.SelectNodes("//Quotes")[0].ChildNodes;
+                        XmlNode luckyNode = nodes[new Random().Next(0, nodes.Count - 1)];
+                        e.Message.Edit(luckyNode.InnerText);
+                    }
+                }
             };
 
             this.client.ExecuteAndWait(async () =>
@@ -199,14 +268,10 @@ namespace PMDODiscordBot
                 }
                 catch (Exception ex)
                 {
-                    Console.Out.WriteLine("Bot failed to connect! Please verify token is correct. Also, if asking for help, NEVER GIVE OUT THE TOKEN EVEN TO ME(JordantheBuizel {Not that I'd want it})!");
+                    Console.Out.WriteLine(
+                        "Bot failed to connect! Please verify token is correct. Also, if asking for help, NEVER GIVE OUT THE TOKEN EVEN TO ME(JordantheBuizel {Not that I'd want it})!");
                     throw;
                 }
-
-                // var voiceChannel = _client.FindServers("PMD Online Staff/Volunteers").FirstOrDefault().VoiceChannels.FirstOrDefault(); // Finds the first VoiceChannel on the server 'Music Bot Server'
-
-                // _vClient = await _client.GetService<AudioService>() // We use GetService to find the AudioService that we installed earlier. In previous versions, this was equivelent to _client.Audio()
-                // .Join(voiceChannel); // Join the Voice Channel, and return the IAudioClient.
             });
         }
 
