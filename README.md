@@ -1,11 +1,14 @@
 # SelfBot-Oodle
-A simple Discord bot written in C# that's main purpose was to change every vowel in a sentence to "oodle" but has now added two other commands
+A simple Discord bot written in C# that's main purpose was to change every vowel in a sentence to "oodle" but has now added other commands
 
-## .oodle
+## .oodle [text]
 Changes every vowel to "oodle". Uses a temporary char (Default: '~') to indicate replace location.
 
-## .makeitdouble
+## .makeitdouble [text]
 Doubles every vowel in a sentence.
 
-## .pfp (Not Working)
+## .quote [int or "random"]
+Pulls the requested quote from config.xml
+
+## .pfp [mention] (Not Working)
 Retrieves a profile picture from a mentioned person and saves it to a file.
