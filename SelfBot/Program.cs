@@ -7,274 +7,359 @@
 //THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // </copyright>
 
+using System;
+using System.CodeDom.Compiler;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Xml;
+using Discord;
+using Discord.Commands;
+using Discord.WebSocket;
+using Microsoft.Extensions.DependencyInjection;
+using SelfBot.Extensions;
+using SelfBot.Scripting;
 
-using Humanizer;
-
-namespace PMDODiscordBot
+namespace SelfBot
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Drawing;
-    using System.Drawing.Imaging;
-    using System.Globalization;
-    using System.IO;
-    using System.Linq;
-    using System.Net;
-    using System.Text;
-    using System.Threading.Tasks;
-    using System.Xml;
-    using Discord;
-    using Discord.Audio;
-    using Discord.Commands;
-
     /// <summary>
     /// The main program
     /// </summary>
     internal class Program
     {
-        private DiscordClient client;
+        public static readonly Random Random = new Random();
+        public static readonly string AppPath = Directory.GetParent(new Uri(Assembly.GetEntryAssembly().CodeBase).LocalPath).FullName;
+        public static DiscordSocketClient Client;
+        public CommandService Commands;
+        private IServiceProvider serviceProvider;
 
-        private string appPath = Directory.GetParent(new Uri(System.Reflection.Assembly.GetEntryAssembly().CodeBase).LocalPath).FullName;
-
-        private XmlDocument doc;
-
-        private bool foolsMode = DateTime.Now.Month == 4 && DateTime.Now.Day == 1;
-
-        // private IAudioClient vClient;
-
-        /// <summary>
-        /// Ordered types of Pokémon, Compliant with PMDO SQL server
-        /// </summary>
-        public enum PokemonType
+        private async Task Start()
         {
-            /// <summary>
-            /// Type to designate error or no secondary type
-            /// </summary>
-            None,
-
-            /// <summary>
-            /// Bug type
-            /// </summary>
-            Bug,
-
-            /// <summary>
-            /// Dark type
-            /// </summary>
-            Dark,
-
-            /// <summary>
-            /// Dragon type
-            /// </summary>
-            Dragon,
-
-            /// <summary>
-            /// Electric type
-            /// </summary>
-            Electric,
-
-            /// <summary>
-            /// Fairy type
-            /// </summary>
-            Fairy,
-
-            /// <summary>
-            /// Fighting type
-            /// </summary>
-            Fighting,
-
-            /// <summary>
-            /// Fire type
-            /// </summary>
-            Fire,
-
-            /// <summary>
-            /// Flying type
-            /// </summary>
-            Flying,
-
-            /// <summary>
-            /// Ghost type
-            /// </summary>
-            Ghost,
-
-            /// <summary>
-            /// Grass type
-            /// </summary>
-            Grass,
-
-            /// <summary>
-            /// Ground type
-            /// </summary>
-            Ground,
-
-            /// <summary>
-            /// Ice type
-            /// </summary>
-            Ice,
-
-            /// <summary>
-            /// Normal type
-            /// </summary>
-            Normal,
-
-            /// <summary>
-            /// Poison type
-            /// </summary>
-            Poison,
-
-            /// <summary>
-            /// Psychic type
-            /// </summary>
-            Psychic,
-
-            /// <summary>
-            /// Rock type
-            /// </summary>
-            Rock,
-
-            /// <summary>
-            /// Steel type
-            /// </summary>
-            Steel,
-
-            /// <summary>
-            /// Water type
-            /// </summary>
-            Water
-        }
-
-        /// <summary>
-        /// Bot's main method
-        /// </summary>
-        private void Start()
-        {
-            this.client = new DiscordClient();
-
-            this.client.UsingCommands(x =>
+            Client = new DiscordSocketClient(new DiscordSocketConfig
             {
-                x.PrefixChar = '.';
-                x.HelpMode = HelpMode.Public;
+                LogLevel = LogSeverity.Info,
+                MessageCacheSize = 10
             });
 
-            this.client.MessageReceived += (s, e) =>
+            this.Commands = new CommandService(new CommandServiceConfig
             {
-                string mess = e.Message.Text;
+                DefaultRunMode = RunMode.Async,
+                CaseSensitiveCommands = false
+            });
 
-                if (mess.StartsWith(".oodle"))
+            this.serviceProvider = new ServiceCollection().BuildServiceProvider();
+
+            Client.Log += Log;
+            this.Commands.Log += Log;
+
+            await this.InstallCommands();
+
+            XmlDocument doc = new XmlDocument();
+            doc.Load(Path.Combine(AppPath, "config.xml"));
+            string token = string.Empty;
+
+            token = doc.SelectNodes("/Settings/Token")[0].InnerText;
+
+            Console.Out.WriteLine(token);
+
+            await Client.LoginAsync(TokenType.User, token);
+            await Client.StartAsync();
+
+            Constants.SelfBotMainInstance = this;
+
+            await Task.Delay(-1);
+        }
+
+        public async Task InstallCommands()
+        {
+            // Hook the MessageReceived Event into our Command Handler
+            Client.MessageReceived += this.HandleCommand;
+
+            // Discover all of the commands in this assembly and load them.
+            await this.Commands.AddModulesAsync(Assembly.GetEntryAssembly());
+        }
+
+        public async Task HandleCommand(SocketMessage msg)
+        {
+            SocketUserMessage message = msg as SocketUserMessage;
+
+            if (message == null)
+            {
+                return;
+            }
+
+            if (message.Content.StartsWith("!:") && message.Author.Id == Client.CurrentUser.Id)
+            {
+                // TODO CommandService seems to be broken? 
+                if (Math.Abs(100) < 0)
                 {
+                    // Create a Command Context
+                    CommandContext context = new CommandContext(Client, message);
 
-                    mess = mess.Replace(".oodle", string.Empty);
-                    char[] vowelsLower = new[]
+                    // Execute the command. (result does not indicate a return value,
+                    // rather an object stating if the command executed succesfully)
+                    IResult result = await this.Commands.ExecuteAsync(context, message.Content.Substring(2), this.serviceProvider);
+                    if (!result.IsSuccess)
                     {
-                        'a',
-                        'e',
-                        'i',
-                        'o',
-                        'u'
-                    };
+                        Console.Out.WriteLine(result.ErrorReason + $"\nCommand:\n{message.Content.Substring(2)}");
+                    }
+                }
 
-                    mess = vowelsLower.Aggregate(mess, (current, vowel) => current.Replace(vowel, '~'));
+                string[] parse = message.Content.Substring(2).Split(' ');
 
-                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
-                    bool caseSensitive = Convert.ToBoolean(this.doc.SelectNodes("//CaseSensitive")[0].InnerText);
-
-                    if (caseSensitive)
-                    {
-                        for (int index = 0; index < vowelsLower.Length; index++)
+                switch (parse[0].ToLower())
+                {
+                    case "channelmarkov":
                         {
-                            vowelsLower[index] = vowelsLower[index].ToString().ToUpper().ToCharArray()[0];
+                            try
+                            {
+                                List<IMessage> messages = new List<IMessage>();
+
+                                message.Channel.GetMessagesAsync(1000).ForEach(coll => messages.AddRange(coll));
+
+                                List<string> messageContentList = new List<string>();
+
+                                foreach (IMessage message1 in messages)
+                                {
+                                    messageContentList.Add(message1.Content);
+                                }
+
+                                File.WriteAllLines(Path.Combine(AppPath, "markov.txt"), messageContentList.ToArray());
+
+                                ProcessStartInfo info = new ProcessStartInfo
+                                {
+                                    FileName = "py",
+                                    Arguments = $"-3 \"{Path.Combine(Program.AppPath, "markov.py")}\"",
+                                    UseShellExecute = false,
+                                    RedirectStandardOutput = true,
+                                };
+
+                                Process markovProcess = Process.Start(info);
+
+                                string output = markovProcess.StandardOutput.ReadToEnd();
+
+                                Console.Out.WriteLine(output);
+
+                                if (output.Length < 10 && output.Contains("None"))
+                                {
+                                    return;
+                                }
+
+                                while (!File.Exists(Path.Combine(AppPath, "output.txt")))
+                                {
+                                }
+
+                                if (string.IsNullOrWhiteSpace(File.ReadAllText(Path.Combine(AppPath, "output.txt"))))
+                                {
+                                    await message.ModifyAsync(properties =>
+                                    {
+                                        properties.Content = "Markov creation failed!";
+                                    });
+
+                                    await Task.Delay(1000);
+
+                                    await message.DeleteAsync();
+                                }
+
+                                await message.ModifyAsync(properties =>
+                                {
+                                    properties.Content = string.Empty;
+
+                                    EmbedBuilder builder = new EmbedBuilder();
+                                    builder.Title = $"Markov output for channel {message.Channel.Name}:";
+                                    builder.Description = $"{File.ReadAllText(Path.Combine(AppPath, "output.txt")).Replace("@", string.Empty).Replace("\n", string.Empty)}";
+
+
+                                });
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e);
+
+                                if (string.IsNullOrWhiteSpace(File.ReadAllText(Path.Combine(AppPath, "output.txt"))))
+                                {
+                                    await message.ModifyAsync(properties =>
+                                    {
+                                        properties.Content = "Markov creation failed!";
+                                    });
+
+                                    await Task.Delay(1000);
+
+                                    await message.DeleteAsync();
+                                }
+                            }
+                            finally
+                            {
+                                if (File.Exists(Path.Combine(AppPath, "output.txt")))
+                                {
+                                    File.Delete(Path.Combine(AppPath, "output.txt"));
+                                }
+                            }
                         }
+                        break;
+                    case "ping":
+                        {
+                            DateTime datetime = DateTime.Now;
+
+                            int timeInMilliseconds = datetime.Millisecond + datetime.Second * 1000;
+
+                            await message.ModifyAsync(properties =>
+                            {
+                                properties.Content = $"Pong! Response time {timeInMilliseconds - (message.Timestamp.Millisecond + message.Timestamp.Second * 1000)}ms";
+                            });
+                        }
+                        break;
+                    case "purge":
+                        {
+                            if (int.TryParse(parse[1], out int result))
+                            {
+                                if (result > 5)
+                                {
+                                    await message.ModifyAsync(properties =>
+                                    {
+                                        properties.Content = string.Empty;
+
+                                        EmbedBuilder builder = new EmbedBuilder { Description = "Request refused..." };
+                                        builder.WithColor(System.Drawing.Color.Red.ToDiscordColor());
+                                        properties.Embed = builder.Build();
+                                    });
+
+                                    return;
+                                }
+
+                                List<IMessage> messages = new List<IMessage>();
+
+                                message.Channel.GetMessagesAsync().ForEach(coll => messages.AddRange(coll));
+
+                                int deleted = 0;
+
+                                foreach (IMessage cachedMessage in messages)
+                                {
+                                    if (cachedMessage.Id == message.Id || cachedMessage.Author.Id != message.Author.Id)
+                                    {
+                                        continue;
+                                    }
+
+                                    await cachedMessage.DeleteAsync();
+
+                                    deleted++;
+
+                                    if (deleted == result)
+                                    {
+                                        break;
+                                    }
+                                }
+
+                                await message.ModifyAsync(properties =>
+                                {
+                                    properties.Content = string.Empty;
+
+                                    EmbedBuilder builder = new EmbedBuilder {Description = "Request successful!"};
+                                    builder.WithColor(System.Drawing.Color.Green.ToDiscordColor());
+                                    properties.Embed = builder.Build();
+                                });
+
+                                await Task.Delay(1000);
+
+                                await message.DeleteAsync();
+                            }
+                        }
+                        break;
+                    case "execute":
+                    {
+                            try
+                            {
+                                string outputType = parse[1];
+
+                                string[] namespaces = null;
+                                if (Regex.Match(message.Content, @"\<namespaces\>.*\<\\namespaces\>").Success)
+                                {
+                                    namespaces = message.Content.Substring(Regex.Match(message.Content, @"\<namespaces\>.*\<\\namespaces\>").Index).Replace("<namespaces>", string.Empty).Replace("<\\namespaces>", string.Empty).Split(':');
+                                }
+
+                                string code = message.Content.Substring(9 + 1 + parse[1].Length);
+
+                                int endMatchPos = Regex.Match(code, @"```\n").Index + Regex.Match(code, @"```\n").Length;
+
+                                code = code.Substring(endMatchPos);
+                                code = code.Substring(0, Regex.Match(code, @"\n```").Index);
+
+                                code = ScriptHelper.DynamicMethod(code);
+
+                                if (namespaces != null)
+                                {
+                                    code = ScriptHelper.AddNamespace(code, namespaces);
+                                }
+                                
+                                Assembly assembly = ScriptHelper.Compile(code);
+                                Module module = assembly.GetModules()[0];
+                                Type mType = module.GetType("Script.Script");
+                                MethodInfo methodInfo = mType.GetMethod("DynamicMethod");
+
+                                List<CompilerError> errors = ScriptHelper.Errors;
+
+                                if (errors.Count > 0)
+                                {
+                                    bool hasErrors = false;
+                                    string errorBuilder = string.Empty;
+                                    errorBuilder += "Errors:\n";
+
+                                    foreach (CompilerError compilerError in errors)
+                                    {
+                                        errorBuilder += $"{compilerError.ErrorNumber}. {compilerError.ErrorText} at {{Line {compilerError.Line}:Col {compilerError.Column}}}";
+
+                                        if (!compilerError.IsWarning)
+                                        {
+                                            hasErrors = true;
+                                        }
+                                    }
+
+                                    if (hasErrors)
+                                    {
+                                        await message.ModifyAsync(properties =>
+                                        {
+                                            properties.Content = string.Empty;
+
+                                            EmbedBuilder builder = new EmbedBuilder { Description = "Errors caught!\n" + errorBuilder };
+                                            builder.WithColor(System.Drawing.Color.Red.ToDiscordColor());
+                                            properties.Embed = builder.Build();
+                                        });
+                                        return;
+                                    }
+                                }
+
+                                await message.ModifyAsync(prop =>
+                                {
+                                    prop.Content = string.Empty;
+
+                                    EmbedBuilder builder = new EmbedBuilder();
+                                    builder.Color = System.Drawing.Color.Green.ToDiscordColor();
+                                    builder.Description = methodInfo.Invoke(null, null).ToString();
+                                    prop.Embed = builder.Build();
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Out.WriteLine(ex);
+                            }
                     }
-
-                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
-                    string replace = this.doc.SelectNodes("//ReplaceChar")[0].InnerText;
-
-                    mess = mess.Replace(replace, "oodle");
-
-                    e.Message.Edit(mess);
+                        break;
+                    default:
+                        break;
                 }
-
-                if (mess.StartsWith(".pfp"))
-                {
-                    mess = mess.Replace(".pfp", string.Empty).Replace("@", string.Empty).Trim();
-                    string[] param = new[]
-                    {
-                        mess.Split('#')[0],
-                        mess.Split('#')[1]
-                    };
-
-                    if (e.Server.GetUser(param[0], Convert.ToUInt16(param[1])) != null)
-                    {
-                        WebClient wbclient = new WebClient();
-                        Stream stream =
-                            wbclient.OpenRead(new Uri(e.Server.GetUser(param[0], Convert.ToUInt16(param[1])).AvatarUrl));
-                        Bitmap bitmap;
-                        bitmap = new Bitmap(stream);
-                        
-                        bitmap.Save(Path.Combine(this.appPath, "pfp" + ImageCodecInfo.GetImageEncoders().First(x => x.FormatID == bitmap.RawFormat.Guid).FilenameExtension.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).First().Trim('*').ToLower()));
-                    }
-                    else
-                    {
-                        Console.Out.WriteLine("Failed");
-                    }
-                }
-
-                if (mess.StartsWith(".makeitdouble"))
-                {
-                    char[] vowelsLower = new[]
-                    {
-                        'a',
-                        'e',
-                        'i',
-                        'o',
-                        'u'
-                    };
-
-                    mess = mess.Replace(".makeitdouble", string.Empty).Trim();
-
-                    foreach (char vowel in vowelsLower)
-                    {
-                        mess = mess.Replace(vowel.ToString(), vowel.ToString() + vowel);
-                    }
-
-                    e.Message.Edit(mess);
-                }
-
-                if (mess.StartsWith(".quote"))
-                {
-                    mess = mess.Replace("quote", string.Empty).Trim();
-                    if (int.TryParse(mess, out int output))
-                    {
-                        e.Message.Edit(this.doc.SelectNodes($"//Quotes/{output.ToWords()}")[0].InnerText);
-                    }
-                    else if (mess.ToLower() == "random")
-                    {
-                        XmlNodeList nodes = this.doc.SelectNodes("//Quotes")[0].ChildNodes;
-                        XmlNode luckyNode = nodes[new Random().Next(0, nodes.Count - 1)];
-                        e.Message.Edit(luckyNode.InnerText);
-                    }
-                }
-            };
-
-            this.client.ExecuteAndWait(async () =>
-            {
-                try
-                {
-                    this.doc = new XmlDocument();
-                    this.doc.Load(Path.Combine(this.appPath, "config.xml"));
-                    string token = this.doc.SelectNodes("//Token")[0].InnerText;
-
-                    await this.client.Connect(token, TokenType.User);
-                }
-                catch (Exception ex)
-                {
-                    Console.Out.WriteLine(
-                        "Bot failed to connect! Please verify token is correct. Also, if asking for help, NEVER GIVE OUT THE TOKEN EVEN TO ME(JordantheBuizel {Not that I'd want it})!");
-                    throw;
-                }
-            });
+            }
         }
 
-        private static void Main(string[] args) => new Program().Start();
+        private static void Main(string[] args) => new Program().Start().GetAwaiter().GetResult();
+
+        private static Task Log(LogMessage msg)
+        {
+            Console.WriteLine(msg.ToString());
+            return Task.CompletedTask;
+        }
     }
 }

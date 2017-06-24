@@ -2,12 +2,4 @@
 <Settings>
 	<!-- User specific token -->
 	<Token>insert-token-here</Token>
-	<!-- The character below will also be replaced along with vowels. Note: Cannot be blank -->
-	<ReplaceChar>~</ReplaceChar>
-	<!-- If true, checks for uppercase vowels as well -->
-	<CaseSensitive>false</CaseSensitive>
-  <!-- Stored quotes. Add a new XML node with a number in words (Ex four) with an inner text set to the desired quote -->
-  <Quotes>
-    <zero>Example quote</zero>
-  </Quotes>
 </Settings>
